@@ -1,4 +1,5 @@
 const request = require('supertest');
+const express = require('express');
 
 // Mock version.json before requiring service
 jest.mock('./version.json', () => ({

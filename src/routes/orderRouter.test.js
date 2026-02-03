@@ -34,7 +34,7 @@ jest.mock('../database/database.js', () => {
 const request = require('supertest');
 const express = require('express');
 const orderRouter = require('./orderRouter.js');
-const { DB, Role } = require('../database/database.js');
+const { DB } = require('../database/database.js');
 const { authRouter } = require('./authRouter.js');
 const config = require('../config.js');
 

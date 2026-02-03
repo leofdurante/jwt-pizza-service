@@ -1,7 +1,10 @@
 const js = require('@eslint/js');
 
 module.exports = [
+  // Base JS recommended rules
   js.configs.recommended,
+
+  // Default config for Node/CommonJS source files
   {
     languageOptions: {
       ecmaVersion: 2022,
@@ -25,6 +28,34 @@ module.exports = [
     rules: {
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'no-console': 'off',
+    },
+  },
+
+  // Override for Jest test files so Jest globals are recognized
+  {
+    files: ['**/*.test.js', '**/*.spec.js'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        test: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        jest: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+      },
+    },
+  },
+
+  // Jest setup file
+  {
+    files: ['jest.setup.js'],
+    languageOptions: {
+      globals: {
+        jest: 'readonly',
+      },
     },
   },
 ];
