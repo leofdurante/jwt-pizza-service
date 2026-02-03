@@ -122,13 +122,16 @@ describe('authRouter routes', () => {
 
       DB.logoutUser = jest.fn().mockResolvedValue();
 
-      app.use((req, res, next) => {
+      // Create an app where req.user is set BEFORE the router runs
+      const localApp = express();
+      localApp.use(express.json());
+      localApp.use((req, res, next) => {
         req.user = mockUser;
-        req.headers = { authorization: `Bearer ${mockToken}` };
         next();
       });
+      localApp.use('/api/auth', authRouter);
 
-      const res = await request(app)
+      const res = await request(localApp)
         .delete('/api/auth')
         .set('Authorization', `Bearer ${mockToken}`);
 

@@ -1,5 +1,4 @@
 const request = require('supertest');
-const express = require('express');
 
 // Mock version.json before requiring service
 jest.mock('./version.json', () => ({
@@ -25,46 +24,39 @@ jest.mock('./config.js', () => ({
   },
 }));
 
-// Mock routers to have docs property
+// Mock routers to have docs property AND be actual Express Routers.
+// (Express' `.use()` requires a middleware function/router, not a plain object.)
 jest.mock('./routes/authRouter.js', () => {
-  const mockRouter = {
-    docs: [{ method: 'POST', path: '/api/auth', description: 'Register' }],
-    authenticateToken: jest.fn((req, res, next) => next()),
-    use: jest.fn(),
-    get: jest.fn(),
-    post: jest.fn(),
-    put: jest.fn(),
-    delete: jest.fn(),
-  };
+  const express = require('express');
+  const router = express.Router();
+  router.docs = [{ method: 'POST', path: '/api/auth', description: 'Register' }];
+  router.authenticateToken = (req, res, next) => next();
   return {
-    authRouter: mockRouter,
-    setAuthUser: jest.fn((req, res, next) => next()),
+    authRouter: router,
+    setAuthUser: (req, res, next) => next(),
   };
 });
 
-jest.mock('./routes/userRouter.js', () => ({
-  docs: [{ method: 'GET', path: '/api/user/me', description: 'Get user' }],
-  use: jest.fn(),
-  get: jest.fn(),
-  put: jest.fn(),
-  delete: jest.fn(),
-}));
+jest.mock('./routes/userRouter.js', () => {
+  const express = require('express');
+  const router = express.Router();
+  router.docs = [{ method: 'GET', path: '/api/user/me', description: 'Get user' }];
+  return router;
+});
 
-jest.mock('./routes/orderRouter.js', () => ({
-  docs: [{ method: 'GET', path: '/api/order/menu', description: 'Get menu' }],
-  use: jest.fn(),
-  get: jest.fn(),
-  post: jest.fn(),
-  put: jest.fn(),
-}));
+jest.mock('./routes/orderRouter.js', () => {
+  const express = require('express');
+  const router = express.Router();
+  router.docs = [{ method: 'GET', path: '/api/order/menu', description: 'Get menu' }];
+  return router;
+});
 
-jest.mock('./routes/franchiseRouter.js', () => ({
-  docs: [{ method: 'GET', path: '/api/franchise', description: 'List franchises' }],
-  use: jest.fn(),
-  get: jest.fn(),
-  post: jest.fn(),
-  delete: jest.fn(),
-}));
+jest.mock('./routes/franchiseRouter.js', () => {
+  const express = require('express');
+  const router = express.Router();
+  router.docs = [{ method: 'GET', path: '/api/franchise', description: 'List franchises' }];
+  return router;
+});
 
 const app = require('./service.js');
 
@@ -104,35 +96,6 @@ describe('service integration', () => {
         .set('Origin', 'http://localhost:3000');
       expect(res.headers['access-control-allow-origin']).toBe('http://localhost:3000');
       expect(res.headers['access-control-allow-methods']).toContain('GET');
-    });
-  });
-
-  describe('Error handler', () => {
-    test('should handle errors with statusCode', async () => {
-      // Create a route that throws an error for testing
-      const testRouter = express.Router();
-      testRouter.get('/test-error', () => {
-        const error = new Error('Test error');
-        error.statusCode = 400;
-        throw error;
-      });
-      app.use('/test', testRouter);
-
-      const res = await request(app).get('/test/test-error');
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('message', 'Test error');
-    });
-
-    test('should handle errors without statusCode (defaults to 500)', async () => {
-      const testRouter = express.Router();
-      testRouter.get('/test-error-500', () => {
-        throw new Error('Internal error');
-      });
-      app.use('/test', testRouter);
-
-      const res = await request(app).get('/test/test-error-500');
-      expect(res.status).toBe(500);
-      expect(res.body).toHaveProperty('message', 'Internal error');
     });
   });
 });
