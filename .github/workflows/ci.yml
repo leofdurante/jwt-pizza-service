@@ -88,6 +88,10 @@ jobs:
         run: |
           coverage=$(jq -r '.total.lines.pct' coverage/coverage-summary.json)
           color=$(echo "$coverage < 80" | bc | awk '{if ($1) print "red"; else print "green"}')
+          if [ -z "${{ secrets.NET_ID }}" ]; then
+            echo "Error: GitHub Actions secret NET_ID is not set (badge URL would be missing the net id)"
+            exit 1
+          fi
           url="https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=$coverage%25&color=$color"
           echo "Posting badge update to: $url"
 
