@@ -73,16 +73,16 @@ jobs:
         run: |
           coverage=$(jq -r '.total.lines.pct' coverage/coverage-summary.json)
           if [ "$coverage" = "Unknown" ]; then
-            echo "Warning: No coverage data available"
-            exit 0  # Don't fail, just warn during development
+            echo "Error: No coverage data available"
+            exit 1
           fi
           # Remove quotes and compare as number
           coverage_num=$(echo "$coverage" | tr -d '"')
           if (( $(echo "$coverage_num < 80" | bc -l) )); then
-            echo "⚠️  Warning: Coverage is $coverage_num%, which is below the 80% threshold (required for final submission)"
-            exit 0  # Don't fail during development - change to exit 1 before final submission
+            echo "Error: Coverage is $coverage_num%, which is below the required 80% threshold"
+            exit 1
           fi
-          echo "✅ Coverage is $coverage_num%, which meets the 80% threshold"
+          echo "Coverage is $coverage_num%, which meets the 80% threshold"
 
       - name: Update coverage
         run: |
