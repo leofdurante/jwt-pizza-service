@@ -88,6 +88,20 @@ jobs:
         run: |
           coverage=$(jq -r '.total.lines.pct' coverage/coverage-summary.json)
           color=$(echo "$coverage < 80" | bc | awk '{if ($1) print "red"; else print "green"}')
+          url="https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=$coverage%25&color=$color"
+          echo "Posting badge update to: $url"
+
+          # Capture status + body so failures are debuggable in Actions logs.
+          resp_file="$(mktemp)"
+          http_code="$(curl -sS -o "$resp_file" -w "%{http_code}" -X POST "$url" \
+            -H "authorization: Bearer ${{ secrets.FACTORY_API_KEY }}" || true)"
+
+          echo "Badge service HTTP status: $http_code"
+          echo "Badge service response body:"
+          cat "$resp_file" || true
+
           # Fail the workflow if the badge update fails (non-2xx)
-          curl -fsS -X POST "https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=$coverage%25&color=$color" \
-            -H "authorization: bearer ${{ secrets.FACTORY_API_KEY }}"
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Error: badge update failed"
+            exit 1
+          fi
