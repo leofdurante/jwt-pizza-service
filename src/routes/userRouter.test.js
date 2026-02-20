@@ -23,6 +23,7 @@ jest.mock('../database/database.js', () => {
   return {
     DB: {
       updateUser: jest.fn(),
+      listUsers: jest.fn().mockResolvedValue([[], false]),
     },
     Role,
   };
@@ -154,16 +155,53 @@ describe('userRouter', () => {
   });
 
   describe('GET /api/user', () => {
-    test('should return not implemented', async () => {
+    test('should return users list', async () => {
       mockUser = { id: 1, name: 'Test', email: 'test@test.com', roles: [{ role: 'diner' }] };
+      const mockUsers = [{ id: 1, name: '常用名字', email: 'a@jwt.com', roles: [{ role: 'admin' }] }];
+
+      DB.listUsers = jest.fn().mockResolvedValue([mockUsers, false]);
 
       const testApp = createAppWithUser(mockUser);
 
       const res = await request(testApp).get('/api/user');
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('message', 'not implemented');
-      expect(res.body).toHaveProperty('users', []);
+      expect(res.body).toHaveProperty('users');
+      expect(res.body.users).toEqual(mockUsers);
       expect(res.body).toHaveProperty('more', false);
+    });
+
+    test('should pass page and limit to listUsers', async () => {
+      mockUser = { id: 1, name: 'Test', email: 'test@test.com', roles: [{ role: 'diner' }] };
+      DB.listUsers = jest.fn().mockResolvedValue([[], false]);
+
+      const testApp = createAppWithUser(mockUser);
+
+      await request(testApp).get('/api/user?page=2&limit=5');
+      expect(DB.listUsers).toHaveBeenCalledWith(2, 5, '*');
+    });
+
+    test('should pass name filter to listUsers', async () => {
+      mockUser = { id: 1, name: 'Test', email: 'test@test.com', roles: [{ role: 'diner' }] };
+      DB.listUsers = jest.fn().mockResolvedValue([[], false]);
+
+      const testApp = createAppWithUser(mockUser);
+
+      await request(testApp).get('/api/user?name=pizza');
+      expect(DB.listUsers).toHaveBeenCalledWith(1, 10, 'pizza');
+    });
+
+    test('should return more when there are additional pages', async () => {
+      mockUser = { id: 1, name: 'Test', email: 'test@test.com', roles: [{ role: 'diner' }] };
+      const mockUsers = [{ id: 1, name: 'User1', email: 'u1@test.com', roles: [{ role: 'diner' }] }];
+
+      DB.listUsers = jest.fn().mockResolvedValue([mockUsers, true]);
+
+      const testApp = createAppWithUser(mockUser);
+
+      const res = await request(testApp).get('/api/user?page=1&limit=1');
+      expect(res.status).toBe(200);
+      expect(res.body.users).toEqual(mockUsers);
+      expect(res.body.more).toBe(true);
     });
   });
 });

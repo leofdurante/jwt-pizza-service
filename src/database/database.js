@@ -130,6 +130,32 @@ class DB {
     }
   }
 
+  async listUsers(page = 1, limit = 10, nameFilter = '*') {
+    const connection = await this.getConnection();
+    try {
+      const offset = (page - 1) * limit;
+      const likePattern = nameFilter.replace(/\*/g, '%');
+
+      const users = await this.query(
+        connection,
+        `SELECT id, name, email FROM user WHERE name LIKE ? ORDER BY id LIMIT ${limit + 1} OFFSET ${offset}`,
+        [likePattern]
+      );
+
+      const more = users.length > limit;
+      const pageUsers = more ? users.slice(0, limit) : users;
+
+      for (const user of pageUsers) {
+        const roleResult = await this.query(connection, `SELECT role, objectId FROM userRole WHERE userId=?`, [user.id]);
+        user.roles = roleResult.map((r) => ({ objectId: r.objectId || undefined, role: r.role }));
+      }
+
+      return [pageUsers, more];
+    } finally {
+      connection.end();
+    }
+  }
+
   async getOrders(user, page = 1) {
     const connection = await this.getConnection();
     try {
