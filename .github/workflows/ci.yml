@@ -98,11 +98,12 @@ jobs:
         run: |
           mkdir dist
           cp Dockerfile dist
-          cp -r src/* dist
-          cp *.json dist
-          sed -i "s/root/${{ secrets.DB_USERNAME }}/g" dist/config.js
-          sed -i "s/tempdbpassword/${{ secrets.DB_PASSWORD }}/g" dist/config.js
-          sed -i "s/127.0.0.1/${{ secrets.DB_HOSTNAME }}/g" dist/config.js
+          cp -r src dist
+          cp package*.json dist
+
+          sed -i "s/root/${{ secrets.DB_USERNAME }}/g" dist/src/config.js
+          sed -i "s/tempdbpassword/${{ secrets.DB_PASSWORD }}/g" dist/src/config.js
+          sed -i "s/127.0.0.1/${{ secrets.DB_HOSTNAME }}/g" dist/src/config.js
 
       - name: Upload distribution artifact
         uses: actions/upload-artifact@v4
