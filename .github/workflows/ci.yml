@@ -5,12 +5,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+
     outputs:
       version: ${{ steps.set_version.outputs.version }}
+
     services:
       mysql:
         image: mysql:8.0.29
@@ -18,9 +21,14 @@ jobs:
           MYSQL_ROOT_PASSWORD: tempdbpassword
           MYSQL_DATABASE: pizza
         ports:
-          - '3306:3306'
+          - "3306:3306"
         options: >-
-          --health-cmd "mysqladmin ping -ptempdbpassword" --health-interval 10s --health-start-period 10s --health-timeout 5s --health-retries 10
+          --health-cmd "mysqladmin ping -ptempdbpassword"
+          --health-interval 10s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -28,7 +36,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: "22.x"
 
       - name: Install dependencies
         run: npm ci
@@ -56,56 +64,99 @@ jobs:
             },
           };" > src/config.js
 
-      - name: Tests
+      - name: Run tests
         run: npm test
 
       - name: Run coverage
         run: npm run coverage
 
-      - name: set version
+      - name: Set version
         id: set_version
         run: |
           version=$(date +'%Y%m%d.%H%M%S')
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          printf '{"version": "%s" }' "$version" > src/version.json
+          printf '{"version": "%s"}' "$version" > src/version.json
 
       - name: Check coverage threshold
         run: |
           coverage=$(jq -r '.total.lines.pct' coverage/coverage-summary.json)
-          if [ "$coverage" = "Unknown" ]; then
-            echo "Error: No coverage data available"
-            exit 1
-          fi
-          # Remove quotes and compare as number
           coverage_num=$(echo "$coverage" | tr -d '"')
           if (( $(echo "$coverage_num < 80" | bc -l) )); then
-            echo "Error: Coverage is $coverage_num%, which is below the required 80% threshold"
+            echo "Error: Coverage is $coverage_num%"
             exit 1
           fi
-          echo "Coverage is $coverage_num%, which meets the 80% threshold"
+          echo "Coverage is $coverage_num%"
 
-      - name: Update coverage
+      - name: Update coverage badge
         run: |
           coverage=$(jq -r '.total.lines.pct' coverage/coverage-summary.json)
           color=$(echo "$coverage < 80" | bc | awk '{if ($1) print "red"; else print "green"}')
-          if [ -z "${{ secrets.NET_ID }}" ]; then
-            echo "Error: GitHub Actions secret NET_ID is not set (badge URL would be missing the net id)"
-            exit 1
-          fi
+
           url="https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=$coverage%25&color=$color"
-          echo "Posting badge update to: $url"
 
-          # Capture status + body so failures are debuggable in Actions logs.
-          resp_file="$(mktemp)"
-          http_code="$(curl -sS -o "$resp_file" -w "%{http_code}" -X POST "$url" \
-            -H "authorization: Bearer ${{ secrets.FACTORY_API_KEY }}" || true)"
+          curl -X POST "$url" \
+            -H "authorization: Bearer ${{ secrets.FACTORY_API_KEY }}"
 
-          echo "Badge service HTTP status: $http_code"
-          echo "Badge service response body:"
-          cat "$resp_file" || true
+      # ---------------------------
+      # CREATE DIST FOLDER
+      # ---------------------------
 
-          # Fail the workflow if the badge update fails (non-2xx)
-          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
-            echo "Error: badge update failed"
-            exit 1
-          fi
+      - name: Create dist
+        run: |
+          mkdir dist
+          cp Dockerfile dist
+          cp -r src/* dist
+          cp *.json dist
+          sed -i "s/root/${{ secrets.DB_USERNAME }}/g" dist/config.js
+          sed -i "s/tempdbpassword/${{ secrets.DB_PASSWORD }}/g" dist/config.js
+          sed -i "s/127.0.0.1/${{ secrets.DB_HOSTNAME }}/g" dist/config.js
+
+      - name: Upload distribution artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: dist/
+
+  deploy:
+    name: Deploy Container
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    needs: build
+
+    env:
+      version: ${{ needs.build.outputs.version }}
+
+    steps:
+      - name: Download distribution artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          audience: sts.amazonaws.com
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT }}:role/${{ secrets.CI_IAM_ROLE }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push container image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: jwt-pizza-service
+        run: |
+          docker build --platform=linux/arm64 -t $ECR_REGISTRY/$ECR_REPOSITORY --push .
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:latest" >> $GITHUB_OUTPUT
