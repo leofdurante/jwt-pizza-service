@@ -42,7 +42,6 @@ jobs:
         run: npm ci
 
       - name: Write config file
-
         run: |
           echo "module.exports = {
             jwtSecret: '${{ secrets.JWT_SECRET }}',
@@ -94,10 +93,6 @@ jobs:
 
           curl -X POST "$url" \
             -H "authorization: Bearer ${{ secrets.FACTORY_API_KEY }}"
-
-      # ---------------------------
-      # CREATE DIST FOLDER
-      # ---------------------------
 
       - name: Create dist
         run: |
@@ -156,16 +151,8 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: jwt-pizza-service
         run: |
-          docker build --platform=linux/arm64 -t $ECR_REGISTRY/$ECR_REPOSITORY --push .
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:latest" >> $GITHUB_OUTPUT
-
-            - name: Build and push container image
-        id: build-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: jwt-pizza-service
-        run: |
-          docker build --platform=linux/arm64 -t $ECR_REGISTRY/$ECR_REPOSITORY:latest --push .
+          docker build --platform=linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:latest" >> $GITHUB_OUTPUT
 
       - name: Deploy new container
