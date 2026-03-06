@@ -4,8 +4,10 @@ WORKDIR /usr/src/app
 
 COPY . .
 
-RUN npm install --production
+RUN npm install --omit=dev
 
-EXPOSE 3000
+ENV PORT=80
 
-CMD ["node", "src/index.js"]
+EXPOSE 80
+
+CMD ["node", "index.js"]
