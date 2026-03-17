@@ -1,5 +1,6 @@
 const os = require('os');
-const axios = require('axios');
+// Use CommonJS build of axios so Jest can import it without ESM issues.
+const axios = require('axios/dist/node/axios.cjs');
 const config = require('./config');
 
 // -----------------------------
