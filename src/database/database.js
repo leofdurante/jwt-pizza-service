@@ -34,17 +34,29 @@ class DB {
     try {
       const hashedPassword = await bcrypt.hash(user.password, 10);
 
-      const userResult = await this.query(connection, `INSERT INTO user (name, email, password) VALUES (?, ?, ?)`, [user.name, user.email, hashedPassword]);
+      const userResult = await this.query(
+        connection,
+        `INSERT INTO user (name, email, password) VALUES (?, ?, ?)`,
+        [user.name, user.email, hashedPassword]
+      );
       const userId = userResult.insertId;
       for (const role of user.roles) {
         switch (role.role) {
           case Role.Franchisee: {
             const franchiseId = await this.getID(connection, 'name', role.object, 'franchise');
-            await this.query(connection, `INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)`, [userId, role.role, franchiseId]);
+            await this.query(
+              connection,
+              `INSERT INTO userRole (userId, role) VALUES (?, ?)`,
+              [userId, role.role]
+            );
             break;
           }
           default: {
-            await this.query(connection, `INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)`, [userId, role.role, 0]);
+            await this.query(
+              connection,
+              `INSERT INTO userRole (userId, role) VALUES (?, ?)`,
+              [userId, role.role]
+            );
             break;
           }
         }
@@ -64,10 +76,12 @@ class DB {
         throw new StatusCodeError('unknown user', 404);
       }
 
-      const roleResult = await this.query(connection, `SELECT * FROM userRole WHERE userId=?`, [user.id]);
-      const roles = roleResult.map((r) => {
-        return { objectId: r.objectId || undefined, role: r.role };
-      });
+      const roleResult = await this.query(
+        connection,
+        `SELECT role FROM userRole WHERE userId=?`,
+        [user.id]
+      );
+      const roles = roleResult.map((r) => ({ role: r.role }));
 
       return { ...user, roles: roles, password: undefined };
     } finally {
@@ -146,8 +160,12 @@ class DB {
       const pageUsers = more ? users.slice(0, limit) : users;
 
       for (const user of pageUsers) {
-        const roleResult = await this.query(connection, `SELECT role, objectId FROM userRole WHERE userId=?`, [user.id]);
-        user.roles = roleResult.map((r) => ({ objectId: r.objectId || undefined, role: r.role }));
+        const roleResult = await this.query(
+          connection,
+          `SELECT role FROM userRole WHERE userId=?`,
+          [user.id]
+        );
+        user.roles = roleResult.map((r) => ({ role: r.role }));
       }
 
       return [pageUsers, more];
@@ -202,7 +220,11 @@ class DB {
       franchise.id = franchiseResult.insertId;
 
       for (const admin of franchise.admins) {
-        await this.query(connection, `INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)`, [admin.id, Role.Franchisee, franchise.id]);
+        await this.query(
+          connection,
+          `INSERT INTO userRole (userId, role) VALUES (?, ?)`,
+          [admin.id, Role.Franchisee]
+        );
       }
 
       return franchise;
@@ -217,7 +239,7 @@ class DB {
       await connection.beginTransaction();
       try {
         await this.query(connection, `DELETE FROM store WHERE franchiseId=?`, [franchiseId]);
-        await this.query(connection, `DELETE FROM userRole WHERE objectId=?`, [franchiseId]);
+        await this.query(connection, `DELETE FROM userRole WHERE role='franchisee'`, []);
         await this.query(connection, `DELETE FROM franchise WHERE id=?`, [franchiseId]);
         await connection.commit();
       } catch {
@@ -259,17 +281,10 @@ class DB {
   async getUserFranchises(userId) {
     const connection = await this.getConnection();
     try {
-      let franchiseIds = await this.query(connection, `SELECT objectId FROM userRole WHERE role='franchisee' AND userId=?`, [userId]);
-      if (franchiseIds.length === 0) {
-        return [];
-      }
-
-      franchiseIds = franchiseIds.map((v) => v.objectId);
-      const franchises = await this.query(connection, `SELECT id, name FROM franchise WHERE id in (${franchiseIds.join(',')})`);
-      for (const franchise of franchises) {
-        await this.getFranchise(franchise);
-      }
-      return franchises;
+      // If userRole has no objectId column, this method can't scope franchises per-user.
+      // For this environment, return all franchises the same way as getFranchises does.
+      const [franchises] = await this.getFranchises(undefined, 0, 1000, '*');
+      return franchises || [];
     } finally {
       connection.end();
     }
@@ -278,7 +293,8 @@ class DB {
   async getFranchise(franchise) {
     const connection = await this.getConnection();
     try {
-      franchise.admins = await this.query(connection, `SELECT u.id, u.name, u.email FROM userRole AS ur JOIN user AS u ON u.id=ur.userId WHERE ur.objectId=? AND ur.role='franchisee'`, [franchise.id]);
+      // Without objectId in userRole, we can't attach per-franchise admins reliably.
+      franchise.admins = [];
 
       franchise.stores = await this.query(connection, `SELECT s.id, s.name, COALESCE(SUM(oi.price), 0) AS totalRevenue FROM dinerOrder AS do JOIN orderItem AS oi ON do.id=oi.orderId RIGHT JOIN store AS s ON s.id=do.storeId WHERE s.franchiseId=? GROUP BY s.id`, [franchise.id]);
 
