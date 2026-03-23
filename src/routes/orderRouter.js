@@ -4,6 +4,7 @@ const { Role, DB } = require('../database/database.js');
 const { authRouter } = require('./authRouter.js');
 const { asyncHandler, StatusCodeError } = require('../endpointHelper.js');
 const metrics = require('../metrics');
+const logger = require('../logger');
 
 const orderRouter = express.Router();
 
@@ -24,6 +25,15 @@ orderRouter.post(
       const quantity = orderReq.items.length;
 
       const order = await DB.addDinerOrder(req.user, orderReq);
+      const factoryPayload = {
+        diner: {
+          id: req.user.id,
+          name: req.user.name,
+          email: req.user.email,
+        },
+        order,
+      };
+      logger.log('info', 'factory-req', { requestBody: factoryPayload });
 
       const r = await fetch(`${config.factory.url}/api/order`, {
         method: 'POST',
@@ -31,17 +41,14 @@ orderRouter.post(
           'Content-Type': 'application/json',
           authorization: `Bearer ${config.factory.apiKey}`,
         },
-        body: JSON.stringify({
-          diner: {
-            id: req.user.id,
-            name: req.user.name,
-            email: req.user.email,
-          },
-          order,
-        }),
+        body: JSON.stringify(factoryPayload),
       });
 
       const j = await r.json();
+      logger.log(r.ok ? 'info' : 'warn', 'factory-res', {
+        statusCode: r.status,
+        responseBody: j,
+      });
       const latency = Date.now() - start; // ⏱ end timer
 
       if (r.ok) {
@@ -64,6 +71,9 @@ orderRouter.post(
       }
     } catch (err) {
       const latency = Date.now() - start;
+      logger.log('error', 'factory-res', {
+        message: err.message,
+      });
 
       // ❌ FAILURE METRICS
       metrics.pizzaPurchase(false, latency, 0, req.body?.items?.length ?? 1);

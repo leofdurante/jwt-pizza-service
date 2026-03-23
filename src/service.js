@@ -6,12 +6,14 @@ const userRouter = require('./routes/userRouter.js');
 const version = require('./version.json');
 const config = require('./config.js');
 const metrics = require('./metrics');
+const logger = require('./logger');
 
 
 const app = express();
 app.use(metrics.requestTracker); // Track all requests
 app.use(express.json()); // Parse JSON bodies
 app.use(setAuthUser); 
+app.use(logger.httpLogger);
 app.use((req, res, next) => {
   if (req.user?.id) {
     metrics.trackUser(req.user.id);
@@ -56,6 +58,12 @@ app.use('*', (req, res) => {
 
 // Default error handler for all exceptions and errors.
 app.use((err, req, res, next) => {
+  logger.log('error', 'exception', {
+    method: req.method,
+    path: req.originalUrl,
+    message: err.message,
+    stack: err.stack,
+  });
   res.status(err.statusCode ?? 500).json({ message: err.message, stack: err.stack });
   next();
 });
