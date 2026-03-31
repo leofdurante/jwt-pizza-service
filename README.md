@@ -33,7 +33,7 @@ module.exports =  {
 
 ## Endpoints
 
-You can get the documentation for all endpoints by making the following request.
+You can get  the documentation for all endpoints by making the following request.
 
 ```sh
 curl localhost:3000/api/docs
