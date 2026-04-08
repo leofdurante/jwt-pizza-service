@@ -32,7 +32,7 @@ class Logger {
     }
 
     const labels = {
-      component: config.logging.source || 'jwt-pizza-service-dev',
+      component: config.logging.source || 'jwt-pizza-service',
       level,
       type,
     };
